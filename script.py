@@ -3,33 +3,9 @@ if __name__ == "__main__":
 	import pandas as pd
 	import numpy as np
 	import typing
+	import matplotlib.pyplot as plt
 	from scipy.stats import pearsonr, ttest_ind
 	from joblib import Parallel, delayed
-
-def calculate_entropy(central_gene: str, 
-                            local_network: list, 
-                            df_input: pd.DataFrame, 
-                            refcols: list, 
-                            sample_colname: str='') -> float:
-    if not sample_colname:
-        cols_idx = df_input.columns.isin(refcols)
-    else:
-        refcols.append(sample_colname)
-        cols_idx = df_input.columns.isin(refcols)
-    
-    df_central = df_input.loc[central_gene,cols_idx].values
-
-    local_entropy = 0
-    for gene in local_network:
-        upper = abs(pearsonr( df_input.loc[gene,cols_idx].values, df_central)[0])
-        lower = 0
-        for gene1 in local_network:
-            lower += abs(pearsonr( df_input.loc[gene1,cols_idx].values, df_central)[0])
-        p_i = upper/lower
-        e_i = p_i*np.log2(p_i)
-        local_entropy +=e_i
-
-    return(-1*local_entropy/len(local_network))
 
 def calculate_entropy_faster(central_gene: str, local_network: list[str], df_input: pd.DataFrame, refcols: list[str], sample_colname: str='') -> float:
     if not sample_colname:
@@ -68,9 +44,9 @@ def calculate_diffsd(central_gene: str,
 
 if __name__ == "__main__":
 	os.chdir('/Users/zagidull/Documents/netzoo/')
-    # controls
+    	
+	# controls
 	# Tet-on control mice where BCR-ABL expression was suppressed N=3
-	
 	cList1 = ['COHP_44959','COHP_44960','COHP_44961','COHP_44962','COHP_44963','COHP_44964','COHP_44965','COHP_44966','COHP_44967','COHP_44968',
 	         'COHP_44969','COHP_44970','COHP_44971','COHP_44972','COHP_44973','COHP_44974','COHP_44975','COHP_44976','COHP_44977']
 	cList2 = ['COHP_44978','COHP_44979','COHP_44980','COHP_44981','COHP_44982','COHP_44983','COHP_44984','COHP_44985','COHP_44986','COHP_44987',
@@ -90,140 +66,97 @@ if __name__ == "__main__":
 	      'COHP_49216','COHP_49217','COHP_49218','COHP_49219','COHP_49220','COHP_49221','COHP_49222','COHP_49223']
 	sList6 = ['COHP_49224','COHP_49225','COHP_49226','COHP_49227','COHP_49228','COHP_49229','COHP_49230','COHP_49231','COHP_49232','COHP_49233','COHP_49234',
 	      'COHP_49235','COHP_49236','COHP_49237','COHP_49238','COHP_49239','COHP_49240']
-	
+		
+	# read in rnaseq data, it is qnormed i believe
 	df = pd.read_csv('GSE244990_cml_mrna_processed_1tpm_in_5_samples.tsv') # https://www.ncbi.xyz/geo/query/acc.cgi?acc=GSE244990
 	df.iloc[:,0] = df.iloc[:,0].str.split('.',expand=True).iloc[:,0].values
 	df.rename(columns={'Unnamed: 0':'GeneName'}, inplace=True)
 	df.set_index('GeneName', inplace=True)
 	
-	# leave only test and control
+	# leave only test and control samples. they have two more sets where bcr-abl was turned off halfway through and where stimulated treatment, so ignore those
 	df = df.loc[:, cList1+cList2+cList3+sList1+sList2+sList3+sList4+sList5+sList6]
-	# read ppi
+	
+	# read ppi. it is a normalized at gene level list from pickle3
 	ppi = pd.read_csv('ppi.csv')
 	ppi_reduced = ppi[ppi.InteractorA.isin(df.index)].reset_index(drop=True)
 	ppi_reduced = ppi_reduced[ppi_reduced.InteractorB.isin(df.index)].reset_index(drop=True)
 	unique_genes = np.unique(ppi_reduced.values.reshape(-1))
 	df = df.loc[df.index.isin(unique_genes),:]
 	
+	# get one-hop neighbours in ppi-tf network
 	holderDict = {}
 	for idx in df.index:
 		holderDict[idx]=get_neighbours(idx, ppi_reduced)
 	
-	# weeks 8 to 12 for all but sample4
+	# calculate entropy
 	holder = []
-	for i in list(range(8,12)):
+	df_log = np.log2(df+0.000000001) # doing log-transform seems to stabilizes entropy calculation, vs using rnaseq values as-is. it also makes the differential entropy scores much smaller 
+	for i in range(19):
 	    temp = []
-	    df_week = df.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList3[i],sList5[i],sList6[i] ]] 
-	    df_week.columns = ['c1', 'c2', 'c3', 's1', 's2', 's3', 's5', 's6']
-	    for sample in ['s1', 's2', 's3', 's5', 's6']:
+	    if i < 8:
+	        samples = ['s1','s2','s3','s4','s5','s6']
+	        df_week = df_log.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList3[i],sList4[i],sList5[i],sList6[i] ]] 
+	        df_week.columns = ['c1','c2','c3','s1','s2','s3','s4','s5','s6']
+	    elif i in [8,9,10,11]:
+	        samples = ['s1','s2','s3','s5','s6']
+	        df_week = df_log.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList3[i],sList5[i],sList6[i] ]] 
+	        df_week.columns = ['c1','c2','c3','s1','s2','s3','s5','s6']
+	    elif i in [12,13,14,15,16]:
+	        samples = ['s1','s2','s5','s6']
+	        df_week = df_log.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList5[i],sList6[i] ]] 
+	        df_week.columns = ['c1','c2','c3','s1','s2','s5','s6']
+	    else:
+	        samples = ['s1','s2','s5']
+	        df_week = df_log.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList5[i] ]] 
+	        df_week.columns = ['c1','c2','c3','s1','s2','s5']
+	    for sample in samples:
 	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3']] for x in df.index.tolist()]
-	        entropy_local = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols) \
+	        params = [ [x,holderDict[x],df_week,['c1','c2','c3']] for x in df_log.index.tolist()]
+	        entropy_local = Parallel(n_jobs=9)(delayed(calculate_entropy_faster)(central_gene,local_network,df_input,refcols) \
 	                                           for central_gene,local_network,df_input,refcols in params)
-	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
-	        entropy_sample = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols,sample_colname) \
+	        params = [ [x,holderDict[x],df_week,['c1','c2','c3'],sample] for x in df_log.index.tolist()]
+	        entropy_sample = Parallel(n_jobs=9)(delayed(calculate_entropy_faster)(central_gene,local_network,df_input,refcols,sample_colname) \
 	                                            for central_gene,local_network,df_input,refcols,sample_colname in params)
-	        ent_local = np.array(entropy_local)
-	        ent_local[np.isnan(ent_local)]=0
-	    
-	        ent_sample = np.array(entropy_sample)
-	        ent_sample[np.isnan(ent_sample)]=0
-	        
-	        params = [ [x,df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
+	        params = [ [x,df_week,['c1','c2','c3'],sample] for x in df_log.index.tolist()]
 	        sd_differential = Parallel(n_jobs=9)(delayed(calculate_diffsd)(central_gene,df_input,refcols,sample_colname) \
 	                                        for central_gene,df_input,refcols,sample_colname in params)
+	                                        
+	        ent_local = np.array(entropy_local)
+	        ent_local[np.isnan(ent_local)]=0
+	        ent_sample = np.array(entropy_sample)
+	        ent_sample[np.isnan(ent_sample)]=0
 	        sd_diff = np.array(sd_differential)
-	    
 	        entropy_differential = abs(ent_sample-ent_local)
 	        val=entropy_differential*sd_diff
-	        temp.append(np.sum(val)/len(df.index))
-	    print(i,temp)
+	        
+	        temp.append(np.sum(val)/len(df_log.index))
 	    holder.append(temp)
-	   
-	df_week8to12 = pd.DataFrame(holder).T
-	df_week8to12.columns = ['wk8','wk9','wk10','wk11']
-	df_week8to12.index = ['s1','s2','s3','s5','s6']
-	df_week8to12.to_csv('week8to12.csv')
 	
-	# weeks 12 to 17 for all but sample4,sample3
-	holder = []
-	for i in list(range(12,17)):
-	    temp = []
-	    df_week = df.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList5[i],sList6[i] ]] 
-	    df_week.columns = ['c1', 'c2', 'c3', 's1', 's2', 's5', 's6']
-	    for sample in ['s1', 's2', 's5', 's6']:
-	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3']] for x in df.index.tolist()]
-	        entropy_local = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols) \
-	                                           for central_gene,local_network,df_input,refcols in params)
-	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
-	        entropy_sample = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols,sample_colname) \
-	                                            for central_gene,local_network,df_input,refcols,sample_colname in params)
-	        ent_local = np.array(entropy_local)
-	        ent_local[np.isnan(ent_local)]=0
-	    
-	        ent_sample = np.array(entropy_sample)
-	        ent_sample[np.isnan(ent_sample)]=0
-	        
-	        params = [ [x,df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
-	        sd_differential = Parallel(n_jobs=9)(delayed(calculate_diffsd)(central_gene,df_input,refcols,sample_colname) \
-	                                        for central_gene,df_input,refcols,sample_colname in params)
-	        sd_diff = np.array(sd_differential)
-	    
-	        entropy_differential = abs(ent_sample-ent_local)
-	        val=entropy_differential*sd_diff
-	        temp.append(np.sum(val)/len(df.index))
-	    print(i,temp)
-	    holder.append(temp)
-	   
-	df_week12to17 = pd.DataFrame(holder).T
-	df_week12to17.columns = ['wk12','wk13','wk14','wk15','wk16']
-	df_week12to17.index = ['s1','s2','s5','s6']
-	df_week12to17.to_csv('week12to17.csv')
+	# combine data
+	df0to8 = pd.DataFrame(holder[0:8], index=['wk0','wk1','wk2','wk3','wk4','wk5','wk6','wk7'], columns=['s1','s2','s3','s4','s5','s6']).T
+	df8to12= pd.DataFrame(holder[8:12], index=['wk8','wk9','wk10','wk11'], columns=['s1','s2','s3','s5','s6']).T
+	df12to17= pd.DataFrame(holder[12:17], index=['wk12','wk13','wk14','wk15','wk16'], columns=['s1','s2','s5','s6']).T	
+	df17end= pd.DataFrame(holder[17:], index=['wk17','wk18'], columns=['s1','s2','s5']).T
+	df_wk0toend_individual = pd.concat([df0to8, df8to12, df12to17, df17end], axis=1, join="outer") # indi animals
+	df_wk0toend_individual.to_csv('wk0toend_individualsamples.csv')
 	
-	# weeks 17 to 19 for all but sample4,sample3
-	# farts here. list out of range
-	# Traceback (most recent call last):
-	# File "/Users/zagidull/Documents/netzoo/script.py", line 183, in <module>
-	# df_week = df.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList5[i],sList6[i] ]]
-	# IndexError: list index out of range
-	holder = []
-	for i in [17,18]:
-	    temp = []
-	    df_week = df.loc[:, [cList1[i],cList2[i],cList3[i],sList1[i],sList2[i],sList5[i],sList6[i] ]] 
-	    df_week.columns = ['c1', 'c2', 'c3', 's1', 's2', 's5']
-	    for sample in ['s1', 's2', 's5']:
-	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3']] for x in df.index.tolist()]
-	        entropy_local = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols) \
-	                                           for central_gene,local_network,df_input,refcols in params)
-	        
-	        params = [ [x,holderDict[x],df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
-	        entropy_sample = Parallel(n_jobs=9)(delayed(calculate_entropy)(central_gene,local_network,df_input,refcols,sample_colname) \
-	                                            for central_gene,local_network,df_input,refcols,sample_colname in params)
-	        ent_local = np.array(entropy_local)
-	        ent_local[np.isnan(ent_local)]=0
-	    
-	        ent_sample = np.array(entropy_sample)
-	        ent_sample[np.isnan(ent_sample)]=0
-	        
-	        params = [ [x,df_week,['c1', 'c2', 'c3'],sample] for x in df.index.tolist()]
-	        sd_differential = Parallel(n_jobs=9)(delayed(calculate_diffsd)(central_gene,df_input,refcols,sample_colname) \
-	                                        for central_gene,df_input,refcols,sample_colname in params)
-	        sd_diff = np.array(sd_differential)
-	    
-	        entropy_differential = abs(ent_sample-ent_local)
-	        val=entropy_differential*sd_diff
-	        temp.append(np.sum(val)/len(df.index))
-	    print(i,temp)
-	    holder.append(temp)
-	   
-	df_week12to17 = pd.DataFrame(holder).T
-	df_week12to17.columns = ['wk17','wk18']
-	df_week12to17.index = ['s1','s2','s5']
-	df_week12to17.to_csv('week17to19.csv')
-
+	# plot individual curves
+	fig, ax = plt.subplots(figsize=(18, 8))
+	plt.plot(df_wk0toend_individual.T.fillna(0), label=df_wk0toend_individual.T.columns)	
+	ax.set_xticks(range(len(df_wk0toend_individual.T.index)), labels=df_wk0toend_individual.T.index)
+	ax.set_ylabel('global differential entropy')
+	ax.set_title('global per-sample entropy on ppi-tf using log2 rnaseq data. s3 died on wk7, s4 on 11 and s6 on wk16')
+	ax.legend()
+	plt.savefig('wk0toend_ind_log2rnaseq.png')
+	
+	# plot averaged curve
+	df_wk0toend_averaged = df_wk0toend_individual.mean() # averaged for all ignoring diseased animals
+	fig, ax = plt.subplots(figsize=(18, 8))
+	plt.plot(df_wk0toend_averaged, label='averaged across samples')
+	ax.set_xticks(range(len(df_wk0toend_averaged.index)), labels=df_wk0toend_averaged.index)
+	ax.set_ylabel('averaged global differential entropy')
+	ax.set_title('avg')
+	ax.legend()
+	plt.savefig('wk0toend_avg_log2rnaseq.png')
 
 
