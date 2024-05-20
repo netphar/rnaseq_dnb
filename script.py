@@ -30,6 +30,20 @@ def calculate_entropy(central_gene: str,
         local_entropy +=e_i
 
     return(-1*local_entropy/len(local_network))
+
+def calculate_entropy_faster(central_gene: str, local_network: list[str], df_input: pd.DataFrame, refcols: list[str], sample_colname: str='') -> float:
+    if not sample_colname:
+        cols_idx = df_input.columns.isin(refcols)
+    else:
+        refcols.append(sample_colname)
+        cols_idx = df_input.columns.isin(refcols)
+    
+    ar_central = df_input.loc[central_gene,cols_idx].values
+    ar_local = df_input.loc[local_network,cols_idx].values
+    ar_corrs = abs(np.apply_along_axis(func1d=pearsonr, axis=1, arr=ar_local, y=ar_central)[:, 0])
+    ar_p = ar_corrs/np.sum(ar_corrs)
+    entropy = -1.0*np.sum(ar_p * np.log2(ar_p))/ar_local.shape[0]
+    return entropy
     
 def get_neighbours(genename, df_ppi):
     n1 = df_ppi.loc[ df_ppi.InteractorA==genename,'InteractorB'].values
