@@ -18,7 +18,7 @@ if __name__ == "__main__":
 	ax[1].axvline(x=16, color='brown', linestyle='-')
 	ax[1].legend()
 	
-	ax[0].set_ylim([0, 0.015])
+	ax[0].set_ylim([0, ymax])
 	ax[0].set_ylabel('global differential entropy')
 	ax[0].set_title(f'per-sample gaussMI entropy on tf-ppi=5k, rnaseq is Ln-transformed, normalized to $\mu$=0 var=1 and filtered at 40% of CoefVar')
 	ax[0].plot(df, label=df.columns)
