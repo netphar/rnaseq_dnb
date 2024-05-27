@@ -13,7 +13,7 @@ if __name__ == "__main__":
 	df.iloc[:,0] = df.iloc[:,0].str.split('.',expand=True).iloc[:,0].values
 	df.rename(columns={'Unnamed: 0':'GeneName'}, inplace=True)
 	df.set_index('GeneName', inplace=True)
-	df.to_csv('/Users/zagidull/Documents/netzoo/rnaseq_dnb/raw/df.csv')
+	df.to_csv('/Users/zagidull/Documents/netzoo/rnaseq_dnb/raw/df.csv', index=True)
 	
 	# controls
 	# Tet-on control mice where BCR-ABL expression was suppressed N=3
