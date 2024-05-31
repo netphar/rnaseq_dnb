@@ -190,14 +190,5 @@ if __name__ == "__main__":
 	df17end= pd.DataFrame(holder[17:], index=['wk17','wk18'], columns=['s1','s2','s5']).T
 	df_wk0toend_individual = pd.concat([df0to8, df8to12, df12to17, df17end], axis=1, join="outer") # indi animals
 	df_wk0toend_individual.to_csv('saves/wk0toend_ind_zeromeanln_8kppi_gaussMI.csv')
-	
-	# plot individual curves
-	fig, ax = plt.subplots(figsize=(18, 8))
-	plt.plot(df_wk0toend_individual.T.fillna(0), label=df_wk0toend_individual.T.columns)	
-	ax.set_xticks(range(len(df_wk0toend_individual.T.index)), labels=df_wk0toend_individual.T.index)
-	ax.set_ylabel('global differential entropy')
-	ax.set_title('global per-sample entropy on tf-ppi (8k pairs) using zeromean-ln rnaseq data and gaussMI. s4 died on wk7, s3 on 11 and s6 on wk16')
-	ax.legend()
-	plt.savefig('saves/wk0toend_ind_zeromeanln_8kppi_gaussMI.png')
 
 
