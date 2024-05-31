@@ -1,4 +1,4 @@
-checking out dynamic network biomarkers
+checking out dynamic network biomarkers on timeseries CML data in mice 
 
 This work is licensed under a
 [Creative Commons Attribution 4.0 International License][cc-by].
